@@ -49,6 +49,9 @@
         directionalLight.castShadow = true;
         scene.add(directionalLight);
 
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
+        scene.add(ambientLight);
+
         const exrSkyboxUrl = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/sunset_meadow_path_1k.exr';
         const pmremGenerator = new THREE.PMREMGenerator(renderer);
         pmremGenerator.compileEquirectangularShader();

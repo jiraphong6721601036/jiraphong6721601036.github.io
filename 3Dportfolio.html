@@ -1,165 +1,212 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Zombie Camp 3D Portfolio</title>
-
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>3D Portfolio</title>
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    canvas { display: block; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
-
 <body>
+<script>
 
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x899AD2);
 
-    <script>
+  const camera = new THREE.PerspectiveCamera(
+    75,
+    innerWidth / innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.set(0, 2, 10);
+  camera.lookAt(0, 0, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.rotateSpeed = 0.5;
+  controls.dampingFactor = 0.03;
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  directionalLight.position.set(10.5, 8, 5);
+  directionalLight.castShadow = true;
+  scene.add(directionalLight);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+
+  const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  fillLight.position.set(-5, 4, -3);
+  scene.add(fillLight);
 
 
-    const renderer = new THREE.WebGLRenderer({antialias: true});
-
-    renderer.setSize( window.innerWidth,window.innerHeight);
-
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding;
-
-    document.body.appendChild(renderer.domElement);
+  const PICKABLE_TARGETS = {
+    aboutme: 'aboutme',
+    aboutboard: 'aboutme',
+    projectboard: 'projecttable',
+    projecttable: 'projecttable'
+  };
 
 
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x899AD2);
+  const ZOOM_PADDING = 1.6;
 
 
-    const camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1000
-    );
+  function getPickableRoot(obj) {
+    while (obj) {
+      if (Object.prototype.hasOwnProperty.call(PICKABLE_TARGETS, obj.name)) return obj;
+      obj = obj.parent;
+    }
+    return null;
+  }
 
-    camera.position.set(0, 2, 5);
-    camera.lookAt(0, 0, 0);
+  const pickables = [];
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  let picked_object = null;
 
 
-    const controls = new THREE.OrbitControls(camera,renderer.domElement);
-    controls.enableDamping = true;
-    controls.rotateSpeed = 0.5;
-    controls.dampingFactor = 0.03;
+  const home_position = camera.position.clone();
+  const home_target = controls.target.clone();
+  const focus_target = controls.target.clone();
+  const camera_goal = camera.position.clone();
+  let moving = false;
 
+  function lerp(a, b, t) {
+    //return a+(b-a)*t; ในข้อสอบใช้อันนี้
+    return ((1.0 - t) * a) + (t * b);
+  }
+
+  function resetView() {
+    picked_object = null;
+    focus_target.copy(home_target);
+    camera_goal.copy(home_position);
+    moving = true;
+  }
+
+  function zoomTo(target) {
+    const box = new THREE.Box3().setFromObject(target);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+
+
+    const radius = Math.max(size.x, size.y, size.z) * 0.5;
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const distance = Math.max((radius / Math.tan(fov / 2)) * ZOOM_PADDING, 1.0);
+
+
+    const dir = camera.position.clone().sub(center).normalize();
+
+    picked_object = target;
+    focus_target.copy(center);
+    camera_goal.copy(center).add(dir.multiplyScalar(distance));
+    moving = true;
+  }
+
+
+  controls.addEventListener('start', () => { moving = false; });
+
+
+  const loader = new THREE.GLTFLoader();
+  loader.load('https://jiraphong6721601036.github.io/assets/3Dportfolio9.glb', (gltf) => {
+    const model = gltf.scene;
+
+    model.traverse((child) => {
+      if (!child.isMesh) return;
+      child.receiveShadow = true;
+      child.castShadow = child.name !== 'Plane';
+      pickables.push(child);
+    });
+
+    scene.add(model);
+  });
+
+
+  function onPick(e) {
+    const r = renderer.domElement.getBoundingClientRect();
+    const x = (e.clientX ?? e.touches[0].clientX) - r.left;
+    const y = (e.clientY ?? e.touches[0].clientY) - r.top;
+    pointer.x = (x / r.width) * 2 - 1;
+    pointer.y = -(y / r.height) * 2 + 1;
+
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObjects(pickables, false)[0];
 
     
-    const directionalLight =new THREE.DirectionalLight(0xffffff,1.5);
+    if (hit == null) return;
+    const root = getPickableRoot(hit.object);
+    const target = root ? scene.getObjectByName(PICKABLE_TARGETS[root.name]) : null;
+    if (target == null) return;
 
-    directionalLight.position.set(5,8,5);
-
-    directionalLight.castShadow = true;
-
-    scene.add(directionalLight);
-
-
-    
-
-    const ambientLight =new THREE.AmbientLight(0xffffff,0.7);
-    scene.add(ambientLight);
+    zoomTo(target);
+    console.log('Clicked:', root.name, '-> focus:', target.name);
+  }
 
 
-    const fillLight = new THREE.DirectionalLight(0xffffff,0.3);
-    fillLight.position.set(-5,4,-3);
-    scene.add(fillLight);
+  let down = { x: 0, y: 0 };
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+    down = { x: e.clientX, y: e.clientY };
+  });
+  renderer.domElement.addEventListener('pointerup', (e) => {
+    if (Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) onPick(e);
+  });
 
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') resetView();
+  });
 
-    
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  });
 
-   
-        const texFloor = new THREE.TextureLoader().load('https://jiraphong6721601036.github.io/assets/red_brick_diff_1k.jpg', t => {
-        });
-        const matFloor = new THREE.MeshStandardMaterial({
-            map: texFloor,
-            doubleSided: true
-        });
-        const planeGeometry = new THREE.PlaneGeometry(10, 10);
-        const plane = new THREE.Mesh(planeGeometry, matFloor);
-        plane.rotation.x = -Math.PI / 2; 
-        plane.receiveShadow = true;
-        
-        scene.add(plane);
+  function animate(time) {
+    if (moving) {
+      controls.target.lerp(focus_target, 0.1);
 
-    
+      camera.position.x = lerp(camera.position.x, camera_goal.x, 0.02);
+      camera.position.y = lerp(camera.position.y, camera_goal.y, 0.02);
+      camera.position.z = lerp(camera.position.z, camera_goal.z, 0.02);
 
-        const loader = new THREE.GLTFLoader();
-        loader.load('https://jiraphong6721601036.github.io/assets/medicaltent2.glb',(gltf) => {
-        const model = gltf.scene;
-        model.traverse((child) => {
-                if (child.isMesh) {
-                    child.receiveShadow = true;
-                    child.castShadow = true;
-                }
-            });
-
-
-            model.position.set(0,0,0);
-            scene.add(model);
-        });
-
-
-
-
-
-    function animate() {
-
-        requestAnimationFrame(
-            animate
-        );
-
-        controls.update();
-
-        renderer.render(
-            scene,
-            camera
-        );
-
+      if (camera.position.distanceTo(camera_goal) < 0.01 &&
+          controls.target.distanceTo(focus_target) < 0.01) {
+        moving = false;
+      }
     }
 
-    animate();
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
 
+  requestAnimationFrame(animate);
 
-
-
-    window.addEventListener(
-        'resize',
-        () => {
-
-            camera.aspect =
-                window.innerWidth /
-                window.innerHeight;
-
-            camera.updateProjectionMatrix();
-
-            renderer.setSize(
-                window.innerWidth,
-                window.innerHeight
-            );
-
-        }
-    );
-
-    window.addEventListener(
-        'keydown',
-        (event) => {
-
-        }
-    );
-
+  
 </script>
-
 </body>
+<style>
+  #hint {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    padding: 8px 16px; border-radius: 999px;
+    background: rgba(0,0,0,.45); color: #fff;
+    font: 14px sans-serif; pointer-events: none; white-space: nowrap;
+  }
+</style>
+
+<div id="hint">
+  • ลากเพื่อหมุน&nbsp;&nbsp; • Scroll เพื่อซูม&nbsp;&nbsp; • คลิกวัตถุเพื่อดูรายละเอียด&nbsp;&nbsp; • กด Esc เพื่อกลับมุมเดิม
+</div>
 </html>
